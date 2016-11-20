@@ -1,0 +1,331 @@
+//<![CDATA[
+/*!
+<br />
+<b>Warning</b>:  Cannot modify header information - headers already sent by (output started at /home/anthonymi/www/func/js/script_general.js.php:3) in <b>/home/anthonymi/www/func/js/script_general.js.php</b> on line <b>6</b><br />
+*/
+
+/*!
+ *	inputFocus & inputBlur & inputKeydown
+ *	fonction qui gere le Focus, Blur et onKeyDown. Insere autaumatiquement sur les inputs generes par php>setInput()
+ *	
+ *	@argument :	this		{input, l'input courant}
+ *	@returns :	true
+ *	@requires :	#id_input_dv {id input, input contenant la default value}
+ */
+var prev_input_value = '';
+function inputFocus(input){
+	var id_input = input.id;
+	var value_input = $('#'+id_input).val();
+	prev_input_value = value_input;
+	if(isElementById(id_input+'_dv')){
+		// il y a une valeur par defaut
+		var default_value = $('#'+id_input+'_dv').val();
+		if (value_input == default_value){
+			// on supprime
+			$('#'+id_input).val('');
+			$('#'+id_input).removeClass('placeholder');
+		}
+	}
+	return true;
+}
+function inputKeydown(input,keyPressed){
+	switch(keyPressed){
+		case 27 :	// esc = on restaure la valeur qui etait la juste avant
+			var id_input = input.id;
+			$('#'+id_input).val(prev_input_value);
+			input.blur();
+		break ;
+		case 13 :	// enter = on valide la valeur entree
+			input.blur();
+			// on regarde s'il y a un element de la meme famille ensuite pour activer le focus sur le suivant...
+			// base sur la nomenclature bla_type_langue1 > bla_type_langue2 > bla_submit
+			var id_input = input.id;
+			var nameSplit = id_input.split("_");
+			var langue_input = nameSplit[nameSplit.length - 1];
+			var liste_langues = ["fr","en"];
+			var indice_element = jQuery.inArray(langue_input,liste_langues);
+			if(indice_element != -1){
+				// on l'a trouve dans la liste des langues disponibles. on regarde s'il y a un element suivant par rapport a la langue
+				if(indice_element+1<liste_langues.length){
+					var input_next_name='';
+					for(var i=0;i<nameSplit.length-1;i++){
+						input_next_name += nameSplit[i]+'_';
+					}
+					if(isElementById(input_next_name+liste_langues[indice_element+1])){
+						$('#'+input_next_name+liste_langues[indice_element+1]).focus().select();
+					}
+				// sinon, peut etre un element de type submit
+				}else{
+					if(indice_element+1 == liste_langues.length){
+						var input_next_name='';
+						for(var i=0;i<nameSplit.length-2;i++){
+							input_next_name += nameSplit[i]+'_';
+						}
+						if(isElementById(input_next_name+'submit')){
+							$('#'+input_next_name+'submit').focus();
+						}
+					}
+				}
+			}
+		break ;
+	}
+}
+function inputBlur(input){
+	var id_input = input.id;
+	var value_input = $('#'+id_input).val();
+	var default_value = $('#'+id_input+'_dv').val();
+	if(isElementById(id_input+'_dv')){
+		// il y a une valeur par defaut
+		// si l'element a pour class 'can_be_empty_js', les valeurs nulles sont acceptees
+		if(
+			($('#'+id_input).hasClass("can_be_empty_js") && value_input==default_value) ||
+			(!$('#'+id_input).hasClass("can_be_empty_js") && (value_input==null || value_input=="" || value_input==default_value))
+		){
+			$('#'+id_input).val(default_value);
+			$('#'+id_input).addClass('placeholder');
+		}
+	}
+	return true;
+}
+/*!
+ *	tentative_connection
+ *	fonction qui tente une connexion
+ *	
+ *	@argument :	none
+ *	@returns :	bool
+ *	@requires :	#input_login 		{id input, input contenant le login}
+ *			#input_login_dv 	{id input, input contenant le login default}
+ *			#input_password 	{id input, input contenant le mot de passe}
+ *			#input_password_dv	{id input, input contenant le mot de passe defaut}
+ */
+function tentative_connection(){
+	var login = $('#input_login').val().replace(/&/gi,"[and]");
+	var login_dv = $('#input_login_dv').val();
+	var password = $('#input_password').val().replace(/&/gi,"[and]");
+	var password_dv = $('#input_password_dv').val();
+	var bool_ok = true;
+	// on verifie que les deux valeurs sont correctes
+	if(login==null || login=="" || login==login_dv){
+		$('#input_login').addClass("erreur");
+		bool_ok=false;
+	}
+	if(password==null || password=="" || password==password_dv){
+		$('#input_password').addClass("erreur");
+		bool_ok=false;
+	}
+	if(bool_ok){
+		// on est bon, on continue
+		$.ajax({
+			type:	'POST',
+			url:	'traitement_ajax.php?req=1',
+			data:	'login='+login+'&password='+password,
+			beforeSend:function(){
+				// disable des inputs
+				$('#input_login').attr('disabled', true);
+				$('#input_password').attr('disabled', true);
+				$('#bouton_connexion').addClass("bouton_loading");
+				$('#reponse_connection').html('');
+			},
+			success: function(data){
+				var dataSplit = data.split("<!**AJAX**>");
+				// enable des inputs
+				$('#input_login').attr('disabled', false);
+				$('#input_password').attr('disabled', false);
+				$('#bouton_connexion').removeClass("bouton_loading");
+				// filling divers champs
+				$('#reponse_connection').html(dataSplit[0]);
+				if(dataSplit[1]=='succes'){
+					connection_acceptee();
+				}
+			},
+			error: function (xhr, ajaxOptions, thrownError) {
+				// will fire when timeout is reached
+				$('#reponse_connection').html('<p class="erreur">Timout ! v�rifiez votre connexion</p>');
+				$('#bouton_connexion').removeClass("bouton_loading");
+
+				console.log(xhr.status);
+				console.log(thrownError);
+			},
+			timeout: 3000 // sets timeout to 3 seconds
+		});
+	}else{
+		return false;
+	}
+	return true;
+}
+/*!
+ *	connection_acceptee
+ *	fonction qui, apres une validation de connection, charge le site
+ *	
+ *	@argument :	none
+ *	@returns :	true
+ *	@requires :	#main_conteneur_header	{id_input, input contenant le menu}
+ *			#conteneur		{id_input, input contenant le reste}
+ */
+function connection_acceptee(){
+	$('#main_conteneur_header').slideUp(1500, function() {
+		// on remplit le menu
+		$.ajax({
+			type:	'POST',
+			url:	'menu.php',
+			data:	'utf8=1',
+			success: function(data){
+				$('#main_conteneur_header').html(data);
+				$('#conteneur').fadeOut(1500);
+				$('#main_conteneur_header').slideDown(1500, function() {
+					// on remplit le content
+					$.ajax({
+						type:	'POST',
+						url:	'content.php',
+						data:	'',
+						success: function(data){
+							$('#conteneur').removeClass('lock').html(data);
+							$('#conteneur').fadeIn("fast");
+						}
+					});
+				});
+			}
+		});
+	});
+}
+/*!
+ *	deconnection_acceptee
+ *	fonction qui fait disparaitre le site pour revenir a l'interface de connection
+ *	
+ *	@argument :	none
+ *	@returns :	true
+ *	@requires :	#main_conteneur_header	{id_input, input contenant le menu}
+ *			#conteneur		{id_input, input contenant le reste}
+ */
+function deconnection_acceptee(){
+	$('#conteneur').fadeOut(1500);
+	$('#main_conteneur_header').fadeOut(1500, function() {
+		// on remplit le menu
+		$.ajax({
+			type:	'POST',
+			url:	'menu.php',
+			data:	'',
+			success: function(data){
+				$('#main_conteneur_header').html(data);
+				$.ajax({
+					type:	'POST',
+					url:	'content.php',
+					data:	'',
+					success: function(data){
+						$('#conteneur').addClass('lock').html(data);
+						$('#conteneur').fadeIn(1500);
+						$('#main_conteneur_header').slideDown(1500, function() {
+							goTo('http://anthony-meyer.com/func');
+						});
+					}
+				});
+			}
+		});
+	});
+}
+/*!
+ *	checkValid
+ *	fonction qui se charge de verifier si les inputs/textarea contenus dans un div sont ok
+ *	
+ *	@argument :	#id_conteneur		{id_div, div qui contient tous les elements a verifier}
+ *	@returns :	bool
+ *	@requires :	.input, textarea, etc.	{html, elements a verifier}
+ */
+function checkValid(id_conteneur){
+	// on regarde d'abord si l'element existe
+	if(isElementById(id_conteneur)){
+		// on extrait tous les elements
+		var fils = $('#'+id_conteneur).children();
+		var listeItems = [];
+		var book_ok = true;
+			var can_be_empty_js;
+		$.each(fils, function() {
+			// on controle les elements suivants :
+			if(	( $(this).is('INPUT')	&&	($(this).attr('type')=="text"	 ||  $(this).attr('type')=="password") )
+				|| $(this).is('TEXTAREA')
+			){
+				can_be_empty_js = 'non';
+				if($(this).hasClass("can_be_empty_js")){
+					can_be_empty_js = 'oui';
+				}
+				var id_item = $(this).attr('id');
+				var value_item = $('#'+id_item).val();
+				// on regarde s'il y a une valeur de defaut
+				var default_value = '';
+				if(isElementById(id_item+'_dv')){
+					default_value = $('#'+id_item+'_dv').val();
+				}
+				if(
+					(can_be_empty_js=='oui' && value_item==default_value) ||
+					(can_be_empty_js=='non' && (value_item==null || value_item=="" || value_item==default_value))
+				){
+					$('#'+id_item).addClass('erreur');
+					book_ok = false;
+				}else{
+					$('#'+id_item).removeClass('erreur');
+					listeItems.push([id_item,value_item]);
+				}
+			}
+		});
+		if(book_ok){
+			return listeItems;
+		}
+	}else{
+		return false;
+	}
+}
+/*!
+ *	delet_check
+ *	fonction qui est lancee lorsqu'on clique sur le delet d'une ligne. On doit a present valiser la confirmation
+ *	
+ *	@argument :	#id_conteneur_ligne		{id_div, div qui contient tous les elements de la ligne a supprimer}
+ *	@returns :	bool
+ *	@requires :	none
+ */
+function delet_check(id_conteneur_ligne){
+	// on regarde d'abord si l'element existe
+	if(isElementById(id_conteneur_ligne)){
+		var div_cross = $('#'+id_conteneur_ligne+'>.footer_delet>.footer_cross');
+		var div_conf = $('#'+id_conteneur_ligne+'>.footer_delet>.footer_confirm');
+		div_cross.clearQueue().stop().toggleClass("footer_cross_check");
+		div_conf.clearQueue().stop().animate({width:'toggle',opacity:'toggle',},"slow");
+		return true;
+	}else{
+		return false;
+	}
+}
+
+/*!
+ *	checkHash
+ *	fonction verifie un hash et retourne ce qu il doit etre
+ *	
+ *	@argument :	hash		{int, valeur du hash}
+ *			default_value	{int, valeur par defaut du hash au cas ou}
+ *	@returns :	none
+ *	@requires :	none
+ */
+function checkHash(hash,default_value){
+	if(hash.length>0){
+		// hash non vide, on enleve le # sil y en a un
+		if(hash.charAt(0)=='#')
+			hash = hash.substr(1, hash.length);
+	}
+	// on regarde sa valeur :
+	if(hash.length>0){
+		if(is_int(hash)){
+			return hash;
+		}else{
+			// on a une erreur, on retourne 0 par defaut
+			window.location.hash=default_value;
+			return default_value;
+		}
+	}else{
+		// il netait pas definit, on le met a 1 par defaut
+		window.location.hash=default_value;
+		return default_value;
+	}
+}
+
+
+
+ //]]>
